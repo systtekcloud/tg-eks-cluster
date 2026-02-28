@@ -6,47 +6,44 @@ include "root" {
   path = find_in_parent_folders("root.hcl")
 }
 
-locals {
-  env_name   = read_terragrunt_config(find_in_parent_folders("env.hcl")).locals.env
-  env_config = read_terragrunt_config("${dirname(find_in_parent_folders("region.hcl"))}/_env/${local.env_name}.hcl")
+# Common variables: aws_region, aws_account_id, environment, project_name, default_tags
+include "common" {
+  path           = "${dirname(find_in_parent_folders("region.hcl"))}/_env/common.hcl"
+  expose         = true
+  merge_strategy = "no_merge"
 }
 
-#------------------------------------------------------------------------------
-# Module Source
-# 
-# Options:
-# - Local path (for development): "../../infra//vpc"
-# - Git with tag (for production): "git::git@github.com:YOUR_ORG/infra.git//vpc?ref=${local.env_config.locals.vpc_module_version}"
-#------------------------------------------------------------------------------
+# Env-specific config: vpc_config, features, eks_config, module versions
+# Path uses basename(dirname(get_terragrunt_dir())) → "dev" (no local.* reference)
+include "env" {
+  path           = "${dirname(find_in_parent_folders("region.hcl"))}/_env/${basename(dirname(get_terragrunt_dir()))}.hcl"
+  expose         = true
+  merge_strategy = "no_merge"
+}
+
 terraform {
-  # Local path: root.hcl is at config/, so dirname(...)/ .. resolves to lab01-eks-cluster/
+  # Local path: dirname(root.hcl)/ .. → lab01-eks-cluster/
   source = "${dirname(find_in_parent_folders("root.hcl"))}/../infra//vpc"
 
   # Git reference (for production):
-  # source = "git::git@github.com:YOUR_ORG/infra.git//vpc?ref=${local.env_config.locals.vpc_module_version}"
+  # source = "git::git@github.com:YOUR_ORG/infra.git//vpc?ref=${include.env.locals.vpc_module_version}"
 }
 
-#------------------------------------------------------------------------------
-# Module Inputs
-#------------------------------------------------------------------------------
 inputs = {
-  # VPC Core
-  vpc_cidr           = local.env_config.locals.vpc_config.cidr
-  availability_zones = local.env_config.locals.vpc_config.availability_zones
+  vpc_cidr           = include.env.locals.vpc_config.cidr
+  availability_zones = include.env.locals.vpc_config.availability_zones
 
-  # Subnets
-  public_subnet_cidrs  = local.env_config.locals.vpc_config.public_subnet_cidrs
-  private_subnet_cidrs = local.env_config.locals.vpc_config.private_subnet_cidrs
+  public_subnet_cidrs  = include.env.locals.vpc_config.public_subnet_cidrs
+  private_subnet_cidrs = include.env.locals.vpc_config.private_subnet_cidrs
 
-  # NAT Gateway (cost optimized for dev)
-  enable_nat_gateway = local.env_config.locals.vpc_config.enable_nat_gateway
-  single_nat_gateway = local.env_config.locals.vpc_config.single_nat_gateway
+  # Cost optimized for dev: single NAT
+  enable_nat_gateway = include.env.locals.vpc_config.enable_nat_gateway
+  single_nat_gateway = include.env.locals.vpc_config.single_nat_gateway
 
-  # Isolated subnets (disabled for dev)
-  create_isolated_subnets = local.env_config.locals.vpc_config.create_isolated_subnets
-  isolated_subnet_cidrs   = local.env_config.locals.vpc_config.isolated_subnet_cidrs
+  create_isolated_subnets = include.env.locals.vpc_config.create_isolated_subnets
+  isolated_subnet_cidrs   = include.env.locals.vpc_config.isolated_subnet_cidrs
 
   # Subnet tags for future EKS integration
-  private_subnet_tags = local.env_config.locals.eks_config.private_subnet_tags
-  public_subnet_tags  = local.env_config.locals.eks_config.public_subnet_tags
+  private_subnet_tags = include.env.locals.eks_config.private_subnet_tags
+  public_subnet_tags  = include.env.locals.eks_config.public_subnet_tags
 }
