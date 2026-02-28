@@ -10,19 +10,17 @@
 # Expected path structure: {region}/{env}/{component}
 # Example: eu-west-1/dev/vpc
 #
-# Identity is resolved from dedicated files found via find_in_parent_folders:
-#   region.hcl   → aws_region (derived from region folder name)
-#   env.hcl      → env        (derived from env folder name)
-#   account.hcl  → aws_account_id, project_name (explicit per env)
+# Identity is resolved from:
+#   path_relative_to_include() → region (path_parts[0]) + env (path_parts[1])
+#   account.hcl                → aws_account_id, project_name (explicit per env)
 #------------------------------------------------------------------------------
 
 locals {
-  region_vars  = read_terragrunt_config(find_in_parent_folders("region.hcl"))
-  env_vars     = read_terragrunt_config(find_in_parent_folders("env.hcl"))
-  account_vars = read_terragrunt_config(find_in_parent_folders("account.hcl"))
+  path_parts   = split("/", path_relative_to_include())
+  aws_region   = local.path_parts[0]  # eu-west-1
+  environment  = local.path_parts[1]  # dev / pre / pro
 
-  aws_region   = local.region_vars.locals.aws_region
-  environment  = local.env_vars.locals.env
+  account_vars = read_terragrunt_config(find_in_parent_folders("account.hcl"))
   account_id   = local.account_vars.locals.aws_account_id
   project_name = local.account_vars.locals.project_name
 }
@@ -36,7 +34,7 @@ remote_state {
   config = {
     # Each account has its own state bucket for isolation
     bucket         = "${local.project_name}-tfstate-${local.environment}"
-    key            = "${path_relative_to_include()}/terraform.tfstate"
+    key            = "${local.aws_region}/${path_relative_to_include()}/terraform.tfstate"
     region         = local.aws_region
     encrypt        = true
     use_lockfile   = true

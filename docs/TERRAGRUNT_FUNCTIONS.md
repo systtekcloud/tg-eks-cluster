@@ -44,10 +44,12 @@ include "root" {
   path = find_in_parent_folders("root.hcl")
 }
 
-# Leer configuración de región (busca hacia arriba hasta encontrar region.hcl)
-locals {
-  region_vars = read_terragrunt_config(find_in_parent_folders("region.hcl"))
-  aws_region  = local.region_vars.locals.aws_region
+# Incluir common.hcl: aws_region, environment, account_id, project_name, default_tags
+# dirname(find_in_parent_folders("region.hcl")) → config/eu-west-1/
+include "common" {
+  path           = "${dirname(find_in_parent_folders("region.hcl"))}/_env/common.hcl"
+  expose         = true
+  merge_strategy = "no_merge"
 }
 ```
 
@@ -57,10 +59,21 @@ config/
 ├── root.hcl                          ← find_in_parent_folders("root.hcl")
 └── eu-west-1/
     ├── region.hcl                    ← find_in_parent_folders("region.hcl")
-    └── dev/
-        ├── env.hcl                   ← find_in_parent_folders("env.hcl")
-        └── vpc/
-            └── terragrunt.hcl        ← Desde aquí busca hacia arriba
+    ├── _env/
+    │   ├── common.hcl                ← variables de identidad centralizadas
+    │   ├── dev.hcl                   ← config específica del entorno
+    │   ├── pre.hcl
+    │   └── pro.hcl
+    ├── dev/
+    │   ├── account.hcl               ← find_in_parent_folders("account.hcl")
+    │   └── vpc/
+    │       └── terragrunt.hcl        ← Desde aquí busca hacia arriba
+    ├── pre/
+    │   ├── account.hcl
+    │   └── vpc/terragrunt.hcl
+    └── pro/
+        ├── account.hcl
+        └── vpc/terragrunt.hcl
 ```
 
 ---
@@ -81,22 +94,26 @@ read_terragrunt_config(path)
 ```hcl
 # config/eu-west-1/region.hcl
 locals {
-  aws_region = "eu-west-1"
+  aws_region = basename(get_terragrunt_dir())  # "eu-west-1" derivado del nombre de carpeta
 }
 
-# config/eu-west-1/dev/env.hcl
+# config/eu-west-1/dev/account.hcl
 locals {
-  env = "dev"
+  aws_account_id = "123456789012"
+  account_name   = "myapp-dev"
+  project_name   = "myapp"
 }
 
-# config/eu-west-1/dev/vpc/terragrunt.hcl
+# config/root.hcl — región y entorno desde el path, cuenta desde account.hcl
 locals {
-  # Leer y extraer valores de archivos padres
-  region_vars = read_terragrunt_config(find_in_parent_folders("region.hcl"))
-  env_vars    = read_terragrunt_config(find_in_parent_folders("env.hcl"))
+  # path_relative_to_include() desde eu-west-1/dev/vpc → ["eu-west-1", "dev", "vpc"]
+  path_parts   = split("/", path_relative_to_include())
+  aws_region   = local.path_parts[0]  # "eu-west-1"
+  environment  = local.path_parts[1]  # "dev"
 
-  aws_region  = local.region_vars.locals.aws_region  # "eu-west-1"
-  environment = local.env_vars.locals.env             # "dev"
+  account_vars = read_terragrunt_config(find_in_parent_folders("account.hcl"))
+  account_id   = local.account_vars.locals.aws_account_id
+  project_name = local.account_vars.locals.project_name
 }
 ```
 
@@ -748,21 +765,41 @@ inputs = {
 **Propósito**: Evitar repetición usando configuración jerárquica.
 
 ```hcl
-# config/root.hcl - Nivel global
+# config/root.hcl - Nivel global + identidad
+# region y environment se derivan del path; account_id y project_name desde account.hcl
 locals {
-  project_name = "myapp"
+  path_parts   = split("/", path_relative_to_include())
+  aws_region   = local.path_parts[0]  # eu-west-1
+  environment  = local.path_parts[1]  # dev / pre / pro
+
+  account_vars = read_terragrunt_config(find_in_parent_folders("account.hcl"))
+  account_id   = local.account_vars.locals.aws_account_id
+  project_name = local.account_vars.locals.project_name
 }
 
-# config/eu-west-1/region.hcl - Nivel región
+# config/eu-west-1/region.hcl - Nivel región (âncora para localizar _env/)
 locals {
-  aws_region = "eu-west-1"
-  azs        = ["${local.aws_region}a", "${local.aws_region}b"]
+  aws_region = basename(get_terragrunt_dir())
 }
 
-# config/eu-west-1/dev/env.hcl - Nivel entorno
+# config/eu-west-1/_env/common.hcl - Variables de identidad centralizadas
+# Se evalúa en contexto del llamador: get_terragrunt_dir() → caller's dir
 locals {
-  env           = "dev"
-  instance_size = "t3.small"
+  _region        = read_terragrunt_config(find_in_parent_folders("region.hcl"))
+  _account       = read_terragrunt_config(find_in_parent_folders("account.hcl"))
+  aws_region     = local._region.locals.aws_region
+  aws_account_id = local._account.locals.aws_account_id
+  project_name   = local._account.locals.project_name
+  environment    = basename(dirname(get_terragrunt_dir()))  # "dev" desde .../dev/vpc/
+}
+
+# config/eu-west-1/_env/dev.hcl - Config específica del entorno
+locals {
+  vpc_config = {
+    cidr               = "10.0.0.0/16"
+    availability_zones = ["eu-west-1a", "eu-west-1b"]
+    instance_size      = "t3.small"
+  }
 }
 
 # config/eu-west-1/dev/vpc/terragrunt.hcl - Nivel módulo
@@ -770,24 +807,24 @@ include "root" {
   path = find_in_parent_folders("root.hcl")
 }
 
-locals {
-  root_vars   = read_terragrunt_config(find_in_parent_folders("root.hcl"))
-  region_vars = read_terragrunt_config(find_in_parent_folders("region.hcl"))
-  env_vars    = read_terragrunt_config(find_in_parent_folders("env.hcl"))
+# include "common" expone identidad (region, env, account, project, tags)
+include "common" {
+  path           = "${dirname(find_in_parent_folders("region.hcl"))}/_env/common.hcl"
+  expose         = true
+  merge_strategy = "no_merge"
+}
 
-  # Combinar valores
-  project = local.root_vars.locals.project_name
-  region  = local.region_vars.locals.aws_region
-  env     = local.env_vars.locals.env
-
-  # Valor final
-  vpc_name = "${local.project}-${local.env}-vpc"
+# include "env" expone config específica del entorno
+# basename(dirname(get_terragrunt_dir())) → "dev" sin usar local.*
+include "env" {
+  path           = "${dirname(find_in_parent_folders("region.hcl"))}/_env/${basename(dirname(get_terragrunt_dir()))}.hcl"
+  expose         = true
+  merge_strategy = "no_merge"
 }
 
 inputs = {
-  name               = local.vpc_name
-  region             = local.region
-  availability_zones = local.region_vars.locals.azs
+  name               = "${include.common.locals.project_name}-${include.common.locals.environment}-vpc"
+  availability_zones = include.env.locals.vpc_config.availability_zones
 }
 ```
 
@@ -931,8 +968,9 @@ inputs = {
 
 ```hcl
 locals {
-  env_vars = read_terragrunt_config(find_in_parent_folders("env.hcl"))
-  env      = local.env_vars.locals.env
+  # Entorno derivado del path: eu-west-1/dev/vpc → path_parts[1] = "dev"
+  path_parts = split("/", path_relative_to_include())
+  env        = local.path_parts[1]
 
   # Backend config por entorno
   backend_config = {
@@ -972,30 +1010,23 @@ remote_state {
 
 ```hcl
 # config/root.hcl
+#
+# Estructura esperada: {region}/{env}/{component}
+# Ejemplo: eu-west-1/dev/vpc
+#
+# - region y environment: derivados de path_relative_to_include()
+# - account_id y project_name: leídos desde account.hcl (uno por entorno)
 locals {
-  # Leer configuraciones jerárquicas
-  region_vars  = read_terragrunt_config(find_in_parent_folders("region.hcl"))
-  env_vars     = read_terragrunt_config(find_in_parent_folders("env.hcl"))
+  path_parts   = split("/", path_relative_to_include())
+  aws_region   = local.path_parts[0]  # eu-west-1
+  environment  = local.path_parts[1]  # dev / pre / pro
+
   account_vars = read_terragrunt_config(find_in_parent_folders("account.hcl"))
-
-  # Extraer valores
-  aws_region   = local.region_vars.locals.aws_region
-  environment  = local.env_vars.locals.env
   account_id   = local.account_vars.locals.aws_account_id
-  project_name = "myapp"
-
-  # Tags comunes
-  common_tags = {
-    Project     = local.project_name
-    Environment = local.environment
-    Region      = local.aws_region
-    ManagedBy   = "Terragrunt"
-    GitRepo     = run_cmd("git", "config", "--get", "remote.origin.url")
-    GitCommit   = run_cmd("git", "rev-parse", "--short", "HEAD")
-  }
+  project_name = local.account_vars.locals.project_name
 }
 
-# Backend S3 con DynamoDB lock
+# Backend S3 con S3 native locking
 remote_state {
   backend = "s3"
   config = {
@@ -1003,30 +1034,42 @@ remote_state {
     key            = "${path_relative_to_include()}/terraform.tfstate"
     region         = local.aws_region
     encrypt        = true
-    dynamodb_table = "${local.project_name}-tfstate-lock-${local.environment}"
+    use_lockfile   = true
+
+    profile = "devops"
 
     assume_role = {
-      role_arn     = "arn:aws:iam::${local.account_id}:role/terraform"
-      session_name = "terragrunt-${local.environment}"
+      role_arn     = "arn:aws:iam::${local.account_id}:role/tfadmin"
+      session_name = "terragrunt-backend-${local.environment}"
     }
+  }
+
+  generate = {
+    path      = "_backend.tf"
+    if_exists = "overwrite_terragrunt"
   }
 }
 
 # Provider generation
 generate "provider" {
   path      = "_provider.tf"
-  if_exists = "overwrite"
+  if_exists = "overwrite_terragrunt"
   contents  = <<-EOF
     provider "aws" {
       region  = "${local.aws_region}"
+      profile = "devops"
 
       assume_role {
-        role_arn     = "arn:aws:iam::${local.account_id}:role/terraform"
+        role_arn     = "arn:aws:iam::${local.account_id}:role/tfadmin"
         session_name = "terragrunt-${local.environment}"
       }
 
       default_tags {
-        tags = ${jsonencode(local.common_tags)}
+        tags = {
+          Environment = "${local.environment}"
+          Project     = "${local.project_name}"
+          ManagedBy   = "Terragrunt"
+        }
       }
     }
   EOF
@@ -1037,8 +1080,12 @@ inputs = {
   environment  = local.environment
   project_name = local.project_name
   aws_region   = local.aws_region
-  account_id   = local.account_id
-  tags         = local.common_tags
+
+  tags = {
+    Environment = local.environment
+    Project     = local.project_name
+    ManagedBy   = "Terragrunt"
+  }
 }
 ```
 
