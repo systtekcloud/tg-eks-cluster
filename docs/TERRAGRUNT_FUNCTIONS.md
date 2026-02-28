@@ -1097,34 +1097,43 @@ include "root" {
   path = find_in_parent_folders("root.hcl")
 }
 
-terraform {
-  source = "git::https://github.com/terraform-aws-modules/terraform-aws-vpc.git///?ref=v5.0.0"
+# Variables de identidad: aws_region, environment, aws_account_id, project_name, default_tags
+include "common" {
+  path           = "${dirname(find_in_parent_folders("region.hcl"))}/_env/common.hcl"
+  expose         = true
+  merge_strategy = "no_merge"
 }
 
-locals {
-  env_vars = read_terragrunt_config(find_in_parent_folders("env.hcl"))
-  env      = local.env_vars.locals.env
+# Config específica del entorno: vpc_config, features, eks_config, module versions
+# basename(dirname(get_terragrunt_dir())) → "dev" — solo funciones built-in, no local.*
+include "env" {
+  path           = "${dirname(find_in_parent_folders("region.hcl"))}/_env/${basename(dirname(get_terragrunt_dir()))}.hcl"
+  expose         = true
+  merge_strategy = "no_merge"
+}
 
-  # CIDR blocks por entorno
-  cidr_blocks = {
-    dev = "10.0.0.0/16"
-    pre = "10.10.0.0/16"
-    pro = "10.20.0.0/16"
-  }
+terraform {
+  # dirname(root.hcl)/../infra → lab-root/infra/
+  source = "${dirname(find_in_parent_folders("root.hcl"))}/../infra//vpc"
+
+  # Git reference (producción):
+  # source = "git::git@github.com:YOUR_ORG/infra.git//vpc?ref=${include.env.locals.vpc_module_version}"
 }
 
 inputs = {
-  name = "myapp-${local.env}-vpc"
-  cidr = local.cidr_blocks[local.env]
+  vpc_cidr           = include.env.locals.vpc_config.cidr
+  availability_zones = include.env.locals.vpc_config.availability_zones
 
-  azs             = ["eu-west-1a", "eu-west-1b", "eu-west-1c"]
-  private_subnets = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
-  public_subnets  = ["10.0.101.0/24", "10.0.102.0/24", "10.0.103.0/24"]
+  public_subnet_cidrs  = include.env.locals.vpc_config.public_subnet_cidrs
+  private_subnet_cidrs = include.env.locals.vpc_config.private_subnet_cidrs
 
-  enable_nat_gateway = true
-  enable_vpn_gateway = false
-  enable_dns_hostnames = true
-  enable_dns_support   = true
+  enable_nat_gateway      = include.env.locals.vpc_config.enable_nat_gateway
+  single_nat_gateway      = include.env.locals.vpc_config.single_nat_gateway
+  create_isolated_subnets = include.env.locals.vpc_config.create_isolated_subnets
+  isolated_subnet_cidrs   = include.env.locals.vpc_config.isolated_subnet_cidrs
+
+  private_subnet_tags = include.env.locals.eks_config.private_subnet_tags
+  public_subnet_tags  = include.env.locals.eks_config.public_subnet_tags
 }
 ```
 
@@ -1132,6 +1141,18 @@ inputs = {
 # config/eu-west-1/dev/eks/terragrunt.hcl
 include "root" {
   path = find_in_parent_folders("root.hcl")
+}
+
+include "common" {
+  path           = "${dirname(find_in_parent_folders("region.hcl"))}/_env/common.hcl"
+  expose         = true
+  merge_strategy = "no_merge"
+}
+
+include "env" {
+  path           = "${dirname(find_in_parent_folders("region.hcl"))}/_env/${basename(dirname(get_terragrunt_dir()))}.hcl"
+  expose         = true
+  merge_strategy = "no_merge"
 }
 
 terraform {
@@ -1152,8 +1173,7 @@ dependency "vpc" {
 }
 
 locals {
-  env_vars = read_terragrunt_config(find_in_parent_folders("env.hcl"))
-  env      = local.env_vars.locals.env
+  env = include.common.locals.environment
 
   # Configuración de cluster por entorno
   cluster_config = {
@@ -1214,6 +1234,18 @@ include "root" {
   path = find_in_parent_folders("root.hcl")
 }
 
+include "common" {
+  path           = "${dirname(find_in_parent_folders("region.hcl"))}/_env/common.hcl"
+  expose         = true
+  merge_strategy = "no_merge"
+}
+
+include "env" {
+  path           = "${dirname(find_in_parent_folders("region.hcl"))}/_env/${basename(dirname(get_terragrunt_dir()))}.hcl"
+  expose         = true
+  merge_strategy = "no_merge"
+}
+
 terraform {
   source = "git::https://github.com/terraform-aws-modules/terraform-aws-rds.git///?ref=v6.0.0"
 }
@@ -1223,8 +1255,7 @@ dependency "vpc" {
 }
 
 locals {
-  env_vars = read_terragrunt_config(find_in_parent_folders("env.hcl"))
-  env      = local.env_vars.locals.env
+  env = include.common.locals.environment
 
   # Desencriptar secrets con SOPS
   secrets = yamldecode(sops_decrypt_file("${get_terragrunt_dir()}/secrets.enc.yaml"))
@@ -1361,4 +1392,4 @@ locals {
 ---
 
 **Versión del documento**: Compatible con Terragrunt v0.89.4
-**Última actualización**: 2026-02-25
+**Última actualización**: 2026-02-28
