@@ -31,11 +31,30 @@ locals {
   # Feature Flags
   #----------------------------------------------------------------------------
   features = {
-    vpc_flow_logs    = true   # Required for compliance
-    vpc_endpoints    = true   # Security: no internet for AWS API calls
+    vpc_flow_logs    = true
+    vpc_endpoints    = true
     eks              = false
     alb              = false
     monitoring       = true
+  }
+
+  #----------------------------------------------------------------------------
+  # Flow Logs Configuration (Phase 2)
+  #----------------------------------------------------------------------------
+  flow_logs_config = {
+    enable             = true
+    traffic_type       = "ALL"
+    retention_days     = 90
+    enable_access_logs = true  # Full audit trail in prod
+  }
+
+  #----------------------------------------------------------------------------
+  # VPC Endpoints Configuration (Phase 3)
+  #----------------------------------------------------------------------------
+  vpc_endpoints_config = {
+    gateway_endpoints   = ["s3", "dynamodb"]
+    interface_endpoints = ["ecr.api", "ecr.dkr", "secretsmanager", "sts", "ssm", "logs"]
+    shared_sg           = false  # Individual SGs in prod for compliance
   }
 
   #----------------------------------------------------------------------------

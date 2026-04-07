@@ -33,14 +33,30 @@ locals {
   # Feature Flags - Control what gets deployed
   #----------------------------------------------------------------------------
   features = {
-    # Phase 1
-    vpc_flow_logs    = false  # Enable in Phase 2
-    vpc_endpoints    = false  # Enable in Phase 3
-
-    # Future phases
+    vpc_flow_logs    = false
+    vpc_endpoints    = false
     eks              = false
     alb              = false
     monitoring       = false
+  }
+
+  #----------------------------------------------------------------------------
+  # Flow Logs Configuration (Phase 2)
+  #----------------------------------------------------------------------------
+  flow_logs_config = {
+    enable             = false  # Disabled in dev for cost
+    traffic_type       = "ALL"
+    retention_days     = 7
+    enable_access_logs = false
+  }
+
+  #----------------------------------------------------------------------------
+  # VPC Endpoints Configuration (Phase 3)
+  #----------------------------------------------------------------------------
+  vpc_endpoints_config = {
+    gateway_endpoints   = ["s3"]  # Free — always enable
+    interface_endpoints = []      # None in dev for cost
+    shared_sg           = true
   }
 
   #----------------------------------------------------------------------------

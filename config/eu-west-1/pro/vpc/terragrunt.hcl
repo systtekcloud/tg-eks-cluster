@@ -39,4 +39,16 @@ inputs = {
 
   private_subnet_tags = include.env.locals.eks_config.private_subnet_tags
   public_subnet_tags  = include.env.locals.eks_config.public_subnet_tags
+
+  # Phase 2: Flow Logs
+  enable_flow_logs             = include.env.locals.flow_logs_config.enable
+  flow_logs_traffic_type       = include.env.locals.flow_logs_config.traffic_type
+  flow_logs_retention_days     = include.env.locals.flow_logs_config.retention_days
+  enable_flow_logs_access_logs = include.env.locals.flow_logs_config.enable_access_logs
+
+  # Phase 3: VPC Endpoints
+  gateway_endpoints   = include.env.locals.vpc_endpoints_config.gateway_endpoints
+  interface_endpoints = include.env.locals.vpc_endpoints_config.interface_endpoints
+  shared_endpoint_sg  = include.env.locals.vpc_endpoints_config.shared_sg
+  aws_region          = include.common.locals.aws_region
 }

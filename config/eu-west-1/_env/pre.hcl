@@ -31,11 +31,30 @@ locals {
   # Feature Flags
   #----------------------------------------------------------------------------
   features = {
-    vpc_flow_logs    = true   # Enabled for pre
-    vpc_endpoints    = false
+    vpc_flow_logs    = true
+    vpc_endpoints    = true
     eks              = false
     alb              = false
     monitoring       = false
+  }
+
+  #----------------------------------------------------------------------------
+  # Flow Logs Configuration (Phase 2)
+  #----------------------------------------------------------------------------
+  flow_logs_config = {
+    enable             = true
+    traffic_type       = "ALL"
+    retention_days     = 30
+    enable_access_logs = false
+  }
+
+  #----------------------------------------------------------------------------
+  # VPC Endpoints Configuration (Phase 3)
+  #----------------------------------------------------------------------------
+  vpc_endpoints_config = {
+    gateway_endpoints   = ["s3", "dynamodb"]
+    interface_endpoints = ["ecr.api", "ecr.dkr", "secretsmanager", "sts"]
+    shared_sg           = true
   }
 
   #----------------------------------------------------------------------------

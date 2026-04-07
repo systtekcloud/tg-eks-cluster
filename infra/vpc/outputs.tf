@@ -97,3 +97,34 @@ output "single_nat_gateway" {
   description = "Whether single NAT Gateway mode is used"
   value       = var.single_nat_gateway
 }
+
+#------------------------------------------------------------------------------
+# Flow Logs Outputs
+#------------------------------------------------------------------------------
+output "flow_logs_bucket_id" {
+  description = "ID of the VPC Flow Logs S3 bucket (null if disabled)"
+  value       = try(aws_s3_bucket.flow_logs[0].id, null)
+}
+
+output "flow_logs_bucket_arn" {
+  description = "ARN of the VPC Flow Logs S3 bucket (null if disabled)"
+  value       = try(aws_s3_bucket.flow_logs[0].arn, null)
+}
+
+#------------------------------------------------------------------------------
+# VPC Endpoints Outputs
+#------------------------------------------------------------------------------
+output "gateway_endpoint_ids" {
+  description = "Map of Gateway endpoint IDs keyed by service name"
+  value       = { for k, v in aws_vpc_endpoint.gateway : k => v.id }
+}
+
+output "interface_endpoint_ids" {
+  description = "Map of Interface endpoint IDs keyed by service name"
+  value       = { for k, v in aws_vpc_endpoint.interface : k => v.id }
+}
+
+output "endpoints_security_group_id" {
+  description = "ID of the shared endpoints Security Group (null if not created or using individual SGs)"
+  value       = try(aws_security_group.endpoints[0].id, null)
+}

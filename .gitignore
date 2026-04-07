@@ -38,3 +38,7 @@ terraform.rc
 
 .terragrunt-cache
 **/.terragrunt-cache/*
+
+.claude/*
+.vscode/*
+

@@ -110,6 +110,69 @@ variable "public_subnet_tags" {
 }
 
 #------------------------------------------------------------------------------
+# Optional Variables - Flow Logs
+#------------------------------------------------------------------------------
+variable "enable_flow_logs" {
+  description = "Enable VPC Flow Logs to S3"
+  type        = bool
+  default     = false
+}
+
+variable "flow_logs_traffic_type" {
+  description = "Type of traffic to capture: ACCEPT, REJECT, or ALL"
+  type        = string
+  default     = "ALL"
+
+  validation {
+    condition     = contains(["ACCEPT", "REJECT", "ALL"], var.flow_logs_traffic_type)
+    error_message = "flow_logs_traffic_type must be ACCEPT, REJECT, or ALL."
+  }
+}
+
+variable "flow_logs_retention_days" {
+  description = "Number of days to retain flow logs in S3"
+  type        = number
+  default     = 30
+}
+
+variable "enable_flow_logs_access_logs" {
+  description = "Enable server access logging for the flow logs bucket"
+  type        = bool
+  default     = false
+}
+
+#------------------------------------------------------------------------------
+# Optional Variables - VPC Endpoints
+#------------------------------------------------------------------------------
+variable "gateway_endpoints" {
+  description = "List of Gateway endpoints to create (s3, dynamodb) — free"
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for e in var.gateway_endpoints : contains(["s3", "dynamodb"], e)])
+    error_message = "Gateway endpoints must be 's3' or 'dynamodb'."
+  }
+}
+
+variable "interface_endpoints" {
+  description = "List of Interface endpoints to create (e.g., ecr.api, ecr.dkr, secretsmanager, sts, ssm, logs) — ~$7/month each"
+  type        = list(string)
+  default     = []
+}
+
+variable "shared_endpoint_sg" {
+  description = "Use a shared Security Group for all interface endpoints (true) or individual SGs per endpoint (false)"
+  type        = bool
+  default     = true
+}
+
+variable "aws_region" {
+  description = "AWS region — used for VPC endpoint service names (e.g. com.amazonaws.eu-west-1.s3)"
+  type        = string
+}
+
+#------------------------------------------------------------------------------
 # Optional Variables - General
 #------------------------------------------------------------------------------
 variable "tags" {
