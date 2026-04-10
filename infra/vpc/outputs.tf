@@ -11,6 +11,11 @@ output "vpc_cidr" {
   value       = aws_vpc.this.cidr_block
 }
 
+output "vpc_cidr_block" {
+  description = "CIDR block of the VPC (alias for vpc_cidr)"
+  value       = aws_vpc.this.cidr_block
+}
+
 output "vpc_arn" {
   description = "ARN of the VPC"
   value       = aws_vpc.this.arn

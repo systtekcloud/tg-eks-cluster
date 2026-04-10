@@ -62,8 +62,9 @@ locals {
   #----------------------------------------------------------------------------
   eks_config = {
     cluster_name    = "pro-platform"
-    cluster_version = "1.34"
+    cluster_version = "1.35"
 
+    # Subnet tags (also consumed by vpc/terragrunt.hcl)
     private_subnet_tags = {
       "kubernetes.io/role/internal-elb"        = "1"
       "kubernetes.io/cluster/pro-platform"     = "owned"
@@ -71,6 +72,41 @@ locals {
     public_subnet_tags = {
       "kubernetes.io/role/elb"                 = "1"
       "kubernetes.io/cluster/pro-platform"     = "owned"
+    }
+
+    endpoint_private_access = true
+    endpoint_public_access  = false
+    public_access_cidrs     = []
+
+    authentication_mode             = "API_AND_CONFIG_MAP"
+    bootstrap_cluster_creator_admin = true
+
+    cluster_log_types          = ["api", "audit", "authenticator"]
+    cluster_log_retention_days = 90
+
+    enable_cluster_encryption = true
+
+    node_groups = {
+      system = {
+        instance_types = ["t3.large"]
+        desired_size   = 3
+        min_size       = 3
+        max_size       = 6
+        capacity_type  = "ON_DEMAND"
+        labels = {
+          role = "system"
+        }
+        taints = []
+      }
+    }
+
+    addons = {
+      coredns                = { version = "v1.11.4-eksbuild.2" }
+      kube-proxy             = { version = "v1.35.0-eksbuild.1" }
+      vpc-cni                = { version = "v1.19.2-eksbuild.1" }
+      aws-ebs-csi-driver     = { version = "v1.37.0-eksbuild.1" }
+      snapshot-controller    = { version = "v8.2.0-eksbuild.1" }
+      eks-pod-identity-agent = { version = "v1.3.4-eksbuild.1" }
     }
   }
 }

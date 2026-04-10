@@ -60,20 +60,62 @@ locals {
   }
 
   #----------------------------------------------------------------------------
-  # EKS Configuration (for when EKS is enabled)
+  # EKS Configuration
   #----------------------------------------------------------------------------
   eks_config = {
     cluster_name    = "dev-platform"
-    cluster_version = "1.34"
+    cluster_version = "1.35"
 
-    # Tags required for EKS ALB controller
+    # Subnet tags (also consumed by vpc/terragrunt.hcl)
     private_subnet_tags = {
-      "kubernetes.io/role/internal-elb"           = "1"
-      "kubernetes.io/cluster/dev-platform"        = "owned"
+      "kubernetes.io/role/internal-elb"        = "1"
+      "kubernetes.io/cluster/dev-platform"     = "owned"
     }
     public_subnet_tags = {
-      "kubernetes.io/role/elb"                    = "1"
-      "kubernetes.io/cluster/dev-platform"        = "owned"
+      "kubernetes.io/role/elb"                 = "1"
+      "kubernetes.io/cluster/dev-platform"     = "owned"
+    }
+
+    # Dev: public access para facilitar desarrollo inicial
+    endpoint_private_access = true
+    endpoint_public_access  = true
+    public_access_cidrs     = ["0.0.0.0/0"]  # Restringir a tu IP en producción
+
+    # Authentication
+    authentication_mode             = "API_AND_CONFIG_MAP"
+    bootstrap_cluster_creator_admin = true
+
+    # Logging (mínimo en dev para ahorro)
+    cluster_log_types          = []
+    cluster_log_retention_days = 7
+
+    # Encryption (disabled en dev para ahorro)
+    enable_cluster_encryption = false
+
+    # Node groups
+    node_groups = {
+      system = {
+        instance_types = ["t3.medium"]
+        desired_size   = 2
+        min_size       = 2
+        max_size       = 4
+        capacity_type  = "ON_DEMAND"
+        labels = {
+          role = "system"
+        }
+        taints = []
+      }
+    }
+
+    # Addons - verificar versiones actuales con:
+    # aws eks describe-addon-versions --kubernetes-version 1.35 --addon-name <name>
+    addons = {
+      coredns                = { version = "v1.11.4-eksbuild.2" }
+      kube-proxy             = { version = "v1.35.0-eksbuild.1" }
+      vpc-cni                = { version = "v1.19.2-eksbuild.1" }
+      aws-ebs-csi-driver     = { version = "v1.37.0-eksbuild.1" }
+      snapshot-controller    = { version = "v8.2.0-eksbuild.1" }
+      eks-pod-identity-agent = { version = "v1.3.4-eksbuild.1" }
     }
   }
 }
